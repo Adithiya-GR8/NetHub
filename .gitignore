@@ -21,6 +21,11 @@ dist-ssr/
 *.local
 .env*.local
 
+# Database storage
+backend/data/
+/data/
+*.db
+
 # Logs
 logs/
 *.log

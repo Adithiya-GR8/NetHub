@@ -4,9 +4,10 @@ import {
   Search, Filter, ShieldCheck, ShieldAlert, Cpu, ArrowRight 
 } from 'lucide-react';
 import api from '../../services/api';
+import { PRELOADED_SCENARIOS } from '../../data/demonstrationScenariosData';
 
 export default function DemonstrationScenariosModal({ currentProjectId, onScenarioLoaded, onClose }) {
-  const [scenarios, setScenarios] = useState([]);
+  const [scenarios, setScenarios] = useState(PRELOADED_SCENARIOS);
   const [activeTab, setActiveTab] = useState('VALID'); // 'VALID' or 'INVALID'
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('ALL');
@@ -23,10 +24,14 @@ export default function DemonstrationScenariosModal({ currentProjectId, onScenar
     setErrorMessage('');
     try {
       const res = await api.get('/scenarios');
-      setScenarios(res.data.data || []);
+      if (res.data?.data && res.data.data.length > 0) {
+        setScenarios(res.data.data);
+      } else {
+        setScenarios(PRELOADED_SCENARIOS);
+      }
     } catch (err) {
-      console.error("Failed to fetch demonstration scenarios", err);
-      setErrorMessage("Failed to load demonstration scenarios from backend. Ensure the backend server is running.");
+      console.warn("Using preloaded demonstration scenarios fallback", err);
+      setScenarios(PRELOADED_SCENARIOS);
     } finally {
       setLoading(false);
     }
@@ -38,10 +43,11 @@ export default function DemonstrationScenariosModal({ currentProjectId, onScenar
     );
     if (!hasConfirmed) return;
 
-    setActionLoadingId(scenario.id);
+    const identifier = scenario.id || scenario.code;
+    setActionLoadingId(identifier);
     setErrorMessage('');
     try {
-      const res = await api.post(`/scenarios/${scenario.id}/load`, null, {
+      const res = await api.post(`/scenarios/${identifier}/load`, null, {
         params: currentProjectId ? { targetProjectId: currentProjectId } : {}
       });
       const project = res.data.data;
