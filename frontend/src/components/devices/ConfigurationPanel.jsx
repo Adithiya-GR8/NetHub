@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import { Terminal } from 'lucide-react';
 import api from '../../services/api';
 import MacAddressTablePanel from './MacAddressTablePanel';
 import RoutingTablePanel from './RoutingTablePanel';
 import ArpTablePanel from './ArpTablePanel';
 
-export default function ConfigurationPanel({ deviceId, onClose, onDeviceUpdated }) {
+export default function ConfigurationPanel({ deviceId, onClose, onDeviceUpdated, onOpenTerminal }) {
   const [device, setDevice] = useState(null);
   const [interfaces, setInterfaces] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +62,15 @@ export default function ConfigurationPanel({ deviceId, onClose, onDeviceUpdated 
       <div className="d-flex justify-content-between align-items-center p-3 border-bottom bg-light">
         <div>
           <h6 className="mb-0 fw-bold">{device?.name}</h6>
-          <span className="badge bg-secondary micro">{device?.type}</span>
+          <span className="badge bg-secondary micro me-2">{device?.type}</span>
+          <button 
+            type="button" 
+            className="btn btn-xs btn-outline-dark py-0 px-2"
+            style={{ fontSize: '0.75rem' }}
+            onClick={() => onOpenTerminal && onOpenTerminal(device)}
+          >
+            <Terminal size={12} className="me-1" /> CLI
+          </button>
         </div>
         <button className="btn-close" onClick={onClose}></button>
       </div>
@@ -133,6 +142,75 @@ export default function ConfigurationPanel({ deviceId, onClose, onDeviceUpdated 
                     <option value="OFFLINE">OFFLINE</option>
                   </select>
                 </div>
+
+                {device.type === 'ACCESS_POINT' && (
+                  <>
+                    <div className="mb-2">
+                      <label className="form-label small mb-1">SSID</label>
+                      <input 
+                        type="text" 
+                        className="form-control form-control-sm" 
+                        value={device.ssid || ''} 
+                        onChange={e => setDevice({...device, ssid: e.target.value})} 
+                        placeholder="NetHub-WiFi"
+                      />
+                    </div>
+                    <div className="mb-2">
+                      <label className="form-label small mb-1">Wireless Channel</label>
+                      <select 
+                        className="form-select form-select-sm"
+                        value={device.wirelessChannel || 6}
+                        onChange={e => setDevice({...device, wirelessChannel: parseInt(e.target.value)})}
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(ch => (
+                          <option key={ch} value={ch}>Channel {ch} (2.4 GHz)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-2">
+                      <label className="form-label small mb-1">Wireless Security</label>
+                      <select 
+                        className="form-select form-select-sm"
+                        value={device.wirelessSecurity || 'WPA2-PSK (AES)'}
+                        onChange={e => setDevice({...device, wirelessSecurity: e.target.value})}
+                      >
+                        <option value="WPA2-PSK (AES)">WPA2-PSK (AES)</option>
+                        <option value="WPA3-SAE">WPA3-SAE</option>
+                        <option value="Open">Open (No Security)</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {(device.type === 'ROUTER' || device.type === 'GATEWAY') && (
+                  <>
+                    <div className="mb-2">
+                      <label className="form-label small mb-1">Dynamic Routing Protocol</label>
+                      <select 
+                        className="form-select form-select-sm"
+                        value={device.routingProtocol || 'STATIC'}
+                        onChange={e => setDevice({...device, routingProtocol: e.target.value})}
+                      >
+                        <option value="STATIC">Static Routing</option>
+                        <option value="OSPF">OSPF (Open Shortest Path First)</option>
+                        <option value="RIP">RIPv2 (Routing Information Protocol)</option>
+                        <option value="BGP">BGP (Border Gateway Protocol)</option>
+                      </select>
+                    </div>
+                    {device.routingProtocol === 'BGP' && (
+                      <div className="mb-2">
+                        <label className="form-label small mb-1">Autonomous System (AS Number)</label>
+                        <input 
+                          type="number" 
+                          className="form-control form-control-sm"
+                          value={device.asNumber || 65001}
+                          onChange={e => setDevice({...device, asNumber: parseInt(e.target.value)})}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <button type="submit" className="btn btn-sm btn-outline-primary w-100 mt-2">Save Device</button>
               </form>
             )}
@@ -192,6 +270,38 @@ export default function ConfigurationPanel({ deviceId, onClose, onDeviceUpdated 
                         }}
                         placeholder="e.g. 192.168.1.1"
                       />
+                    </div>
+
+                    <div className="row g-1 mb-2">
+                      <div className="col-6">
+                        <label className="form-label micro mb-0 text-muted">Port Mode</label>
+                        <select 
+                          className="form-select form-select-sm"
+                          value={intf.portMode || 'ACCESS'}
+                          onChange={e => {
+                            const updated = interfaces.map(i => i.id === intf.id ? {...i, portMode: e.target.value} : i);
+                            setInterfaces(updated);
+                          }}
+                        >
+                          <option value="ACCESS">ACCESS</option>
+                          <option value="TRUNK">TRUNK</option>
+                        </select>
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label micro mb-0 text-muted">VLAN ID</label>
+                        <input 
+                          type="number" 
+                          className="form-control form-control-sm" 
+                          value={intf.vlanId !== null && intf.vlanId !== undefined ? intf.vlanId : 1}
+                          onChange={e => {
+                            const val = e.target.value ? parseInt(e.target.value) : 1;
+                            const updated = interfaces.map(i => i.id === intf.id ? {...i, vlanId: val} : i);
+                            setInterfaces(updated);
+                          }}
+                          min="1"
+                          max="4094"
+                        />
+                      </div>
                     </div>
                     <button 
                       className="btn btn-sm btn-primary w-100" 

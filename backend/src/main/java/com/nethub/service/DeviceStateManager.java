@@ -2,6 +2,11 @@ package com.nethub.service;
 
 import com.nethub.engine.ArpEngine;
 import com.nethub.engine.SwitchingEngine;
+import com.nethub.engine.hardware.BridgeEngine;
+import com.nethub.engine.hardware.HubEngine;
+import com.nethub.engine.hardware.WirelessEngine;
+import com.nethub.engine.security.AclEngine;
+import com.nethub.engine.security.NatEngine;
 import com.nethub.entity.Connection;
 import com.nethub.entity.Device;
 import com.nethub.entity.NetworkInterface;
@@ -20,14 +25,13 @@ import com.nethub.model.state.SocketDto;
 import com.nethub.repository.ConnectionRepository;
 import com.nethub.repository.DeviceRepository;
 import com.nethub.repository.NetworkInterfaceRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-@RequiredArgsConstructor
 public class DeviceStateManager {
 
     private final DeviceRepository deviceRepository;
@@ -36,12 +40,62 @@ public class DeviceStateManager {
     private final ArpEngine arpEngine;
     private final SwitchingEngine switchingEngine;
     private final RoutingTableService routingTableService;
+    private final HubEngine hubEngine;
+    private final BridgeEngine bridgeEngine;
+    private final WirelessEngine wirelessEngine;
+    private final AclEngine aclEngine;
+    private final NatEngine natEngine;
 
     // Interface statistics: interfaceId -> InterfaceStats
     private final Map<Long, InterfaceStats> statsMap = new ConcurrentHashMap<>();
 
     // Device active sockets: deviceId -> List<SocketDto>
     private final Map<Long, List<SocketDto>> socketsMap = new ConcurrentHashMap<>();
+
+    @Autowired
+    public DeviceStateManager(DeviceRepository deviceRepository,
+                              NetworkInterfaceRepository interfaceRepository,
+                              ConnectionRepository connectionRepository,
+                              ArpEngine arpEngine,
+                              SwitchingEngine switchingEngine,
+                              RoutingTableService routingTableService,
+                              HubEngine hubEngine,
+                              BridgeEngine bridgeEngine,
+                              WirelessEngine wirelessEngine,
+                              AclEngine aclEngine,
+                              NatEngine natEngine) {
+        this.deviceRepository = deviceRepository;
+        this.interfaceRepository = interfaceRepository;
+        this.connectionRepository = connectionRepository;
+        this.arpEngine = arpEngine;
+        this.switchingEngine = switchingEngine;
+        this.routingTableService = routingTableService;
+        this.hubEngine = hubEngine;
+        this.bridgeEngine = bridgeEngine;
+        this.wirelessEngine = wirelessEngine;
+        this.aclEngine = aclEngine;
+        this.natEngine = natEngine;
+    }
+
+    // Backward-compatible constructor for existing tests
+    public DeviceStateManager(DeviceRepository deviceRepository,
+                              NetworkInterfaceRepository interfaceRepository,
+                              ConnectionRepository connectionRepository,
+                              ArpEngine arpEngine,
+                              SwitchingEngine switchingEngine,
+                              RoutingTableService routingTableService) {
+        this.deviceRepository = deviceRepository;
+        this.interfaceRepository = interfaceRepository;
+        this.connectionRepository = connectionRepository;
+        this.arpEngine = arpEngine;
+        this.switchingEngine = switchingEngine;
+        this.routingTableService = routingTableService;
+        this.hubEngine = new HubEngine();
+        this.bridgeEngine = new BridgeEngine();
+        this.wirelessEngine = new WirelessEngine();
+        this.aclEngine = new AclEngine();
+        this.natEngine = new NatEngine();
+    }
 
     public InterfaceStats getInterfaceStats(Long interfaceId) {
         return statsMap.computeIfAbsent(interfaceId, k -> new InterfaceStats());
@@ -79,14 +133,17 @@ public class DeviceStateManager {
         // ARP Cache
         List<ArpEntry> arpEntries = arpEngine.getArpTable(deviceId).getAllEntries();
 
-        // MAC Address Table (Switches)
-        List<MacTableEntry> macEntries = (device.getType() == DeviceType.SWITCH)
-                ? switchingEngine.getMacTable(deviceId).getAllEntries()
-                : Collections.emptyList();
+        // MAC Address Table (Switches & Bridges)
+        List<MacTableEntry> macEntries = Collections.emptyList();
+        if (device.getType() == DeviceType.SWITCH) {
+            macEntries = switchingEngine.getMacTable(deviceId).getAllEntries();
+        } else if (device.getType() == DeviceType.BRIDGE) {
+            macEntries = bridgeEngine.getBridgeTable(deviceId).getAllEntries();
+        }
 
-        // Routing Table (Routers, PCs, Servers)
+        // Routing Table (Routers, Gateways, PCs, Servers)
         List<RouteEntry> routes = Collections.emptyList();
-        if (device.getType() == DeviceType.ROUTER || device.getType() == DeviceType.PC || device.getType() == DeviceType.SERVER) {
+        if (device.getType() == DeviceType.ROUTER || device.getType() == DeviceType.GATEWAY || device.getType() == DeviceType.PC || device.getType() == DeviceType.SERVER) {
             RoutingTable rt = routingTableService.buildRoutingTable(deviceId);
             if (rt != null) {
                 routes = rt.getAllRoutes();
@@ -108,7 +165,7 @@ public class DeviceStateManager {
             vlanInfo.put("totalVlans", vlanPortMap.size());
         }
 
-        // Basic STP Info
+        // STP Info
         Map<String, Object> stpInfo = new HashMap<>();
         if (device.getType() == DeviceType.SWITCH) {
             stpInfo.put("enabled", true);
@@ -128,6 +185,56 @@ public class DeviceStateManager {
             services.put("http", Map.of("enabled", true, "port", 80, "name", "HTTP Web Server"));
             services.put("dns", Map.of("enabled", true, "port", 53, "name", "DNS Domain Resolution Service"));
             services.put("dhcp", Map.of("enabled", false, "port", 67, "name", "DHCP Dynamic Host Configuration"));
+            services.put("ftp", Map.of("enabled", true, "port", 21, "name", "FTP File Transfer Protocol"));
+            services.put("smtp", Map.of("enabled", true, "port", 25, "name", "SMTP Simple Mail Transfer Protocol"));
+        }
+
+        // Hardware details for Hub, Repeater, Bridge, AP, Modem, Gateway
+        if (device.getType() == DeviceType.HUB) {
+            services.put("hub", Map.of(
+                    "layer", 1,
+                    "mode", "Multiport Repeater",
+                    "collisionDomain", "Single Shared Collision Domain",
+                    "collisionCount", hubEngine.getCollisionCount(deviceId),
+                    "signalsBroadcasted", hubEngine.getSignalCount(deviceId)
+            ));
+        } else if (device.getType() == DeviceType.REPEATER) {
+            services.put("repeater", Map.of(
+                    "layer", 1,
+                    "function", "Signal Regeneration and Amplification",
+                    "attenuationCompensation", "Full waveform recovery (NRZ/Manchester)"
+            ));
+        } else if (device.getType() == DeviceType.BRIDGE) {
+            services.put("bridge", Map.of(
+                    "layer", 2,
+                    "function", "Segment Isolation and MAC Filtering",
+                    "totalSegments", interfaces.size()
+            ));
+        } else if (device.getType() == DeviceType.ACCESS_POINT) {
+            services.put("wireless", Map.of(
+                    "ssid", device.getSsid() != null ? device.getSsid() : "NetHub-WiFi",
+                    "channel", device.getWirelessChannel() != null ? device.getWirelessChannel() : 6,
+                    "security", device.getWirelessSecurity() != null ? device.getWirelessSecurity() : "WPA2_PSK",
+                    "associatedClients", wirelessEngine.getAssociatedClients(deviceId),
+                    "mode", "Infrastructure (BSS)"
+            ));
+        } else if (device.getType() == DeviceType.MODEM) {
+            services.put("modem", Map.of(
+                    "modulation", "QAM-256 (Downstream) / QPSK (Upstream)",
+                    "boundary", "LAN Digital <-> WAN Carrier Signal",
+                    "carrierFrequency", "54-860 MHz"
+            ));
+        } else if (device.getType() == DeviceType.GATEWAY) {
+            services.put("gateway", Map.of(
+                    "layer", "Transport/Application Gateway",
+                    "protocolTranslation", "IPv4 <-> Heterogeneous Network Translation"
+            ));
+        }
+
+        // Security Info (ACL & NAT)
+        if (device.getType() == DeviceType.ROUTER || device.getType() == DeviceType.GATEWAY) {
+            services.put("acl", Map.of("totalRules", aclEngine.getRules(deviceId).size(), "rules", aclEngine.getRules(deviceId)));
+            services.put("nat", Map.of("totalTranslations", natEngine.getTranslations(deviceId).size(), "table", natEngine.getTranslations(deviceId)));
         }
 
         return DeviceInspectionDto.builder()
@@ -159,7 +266,6 @@ public class DeviceStateManager {
         String connectedInterfaceName = null;
 
         if (device.getStatus() == DeviceStatus.ONLINE && adminStatus == InterfaceStatus.UP) {
-            // Find active connection
             Connection conn = connections.stream()
                     .filter(c -> c.getStatus() == ConnectionStatus.ACTIVE &&
                             (c.getSourceInterfaceId().equals(intf.getId()) || c.getDestinationInterfaceId().equals(intf.getId())))
@@ -223,34 +329,12 @@ public class DeviceStateManager {
 
         List<SocketDto> defaults = new ArrayList<>();
         if (device.getType() == DeviceType.SERVER) {
-            defaults.add(SocketDto.builder()
-                    .protocol("TCP")
-                    .localAddress("0.0.0.0")
-                    .localPort(80)
-                    .remoteAddress("0.0.0.0")
-                    .remotePort(0)
-                    .state("LISTEN")
-                    .serviceName("HTTP Web Server")
-                    .build());
-            defaults.add(SocketDto.builder()
-                    .protocol("UDP")
-                    .localAddress("0.0.0.0")
-                    .localPort(53)
-                    .remoteAddress("0.0.0.0")
-                    .remotePort(0)
-                    .state("LISTEN")
-                    .serviceName("DNS Server")
-                    .build());
+            defaults.add(SocketDto.builder().protocol("TCP").localAddress("0.0.0.0").localPort(80).remoteAddress("0.0.0.0").remotePort(0).state("LISTEN").serviceName("HTTP Web Server").build());
+            defaults.add(SocketDto.builder().protocol("UDP").localAddress("0.0.0.0").localPort(53).remoteAddress("0.0.0.0").remotePort(0).state("LISTEN").serviceName("DNS Server").build());
+            defaults.add(SocketDto.builder().protocol("TCP").localAddress("0.0.0.0").localPort(21).remoteAddress("0.0.0.0").remotePort(0).state("LISTEN").serviceName("FTP File Server").build());
+            defaults.add(SocketDto.builder().protocol("TCP").localAddress("0.0.0.0").localPort(25).remoteAddress("0.0.0.0").remotePort(0).state("LISTEN").serviceName("SMTP Mail Server").build());
         } else if (device.getType() == DeviceType.PC) {
-            defaults.add(SocketDto.builder()
-                    .protocol("UDP")
-                    .localAddress("0.0.0.0")
-                    .localPort(68)
-                    .remoteAddress("0.0.0.0")
-                    .remotePort(0)
-                    .state("BOUND")
-                    .serviceName("DHCP Client")
-                    .build());
+            defaults.add(SocketDto.builder().protocol("UDP").localAddress("0.0.0.0").localPort(68).remoteAddress("0.0.0.0").remotePort(0).state("BOUND").serviceName("DHCP Client").build());
         }
         return defaults;
     }
@@ -273,6 +357,10 @@ public class DeviceStateManager {
     public void resetAllStats() {
         statsMap.clear();
         socketsMap.clear();
+        hubEngine.resetAll();
+        bridgeEngine.resetAll();
+        wirelessEngine.resetAll();
+        aclEngine.resetAll();
+        natEngine.resetAll();
     }
 }
-

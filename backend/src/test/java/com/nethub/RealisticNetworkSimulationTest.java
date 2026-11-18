@@ -4,6 +4,11 @@ import com.nethub.engine.ArpEngine;
 import com.nethub.engine.NetworkPathFinder;
 import com.nethub.engine.RoutingEngine;
 import com.nethub.engine.SwitchingEngine;
+import com.nethub.engine.routing.DijkstraEngine.GraphEdge;
+import com.nethub.engine.routing.RipEngine;
+import com.nethub.engine.security.AclEngine;
+import com.nethub.engine.security.FirewallEngine;
+import com.nethub.engine.security.NatEngine;
 import com.nethub.engine.simulation.DiscreteNetworkSimulator;
 import com.nethub.entity.*;
 import com.nethub.entity.enums.ConnectionStatus;
@@ -59,6 +64,40 @@ public class RealisticNetworkSimulationTest {
     private DeviceStateManager stateManager;
     @Autowired
     private DiscreteNetworkSimulator discreteSimulator;
+    @Autowired
+    private com.nethub.engine.hardware.HubEngine hubEngine;
+    @Autowired
+    private com.nethub.engine.hardware.BridgeEngine bridgeEngine;
+    @Autowired
+    private com.nethub.engine.hardware.WirelessEngine wirelessEngine;
+    @Autowired
+    private com.nethub.engine.hardware.MacControlEngine macControlEngine;
+    @Autowired
+    private com.nethub.engine.switching.SwitchingTechniquesEngine switchingTechniquesEngine;
+    @Autowired
+    private com.nethub.engine.routing.DijkstraEngine dijkstraEngine;
+    @Autowired
+    private com.nethub.engine.routing.OspfEngine ospfEngine;
+    @Autowired
+    private com.nethub.engine.routing.RipEngine ripEngine;
+    @Autowired
+    private com.nethub.engine.routing.BgpEngine bgpEngine;
+    @Autowired
+    private com.nethub.engine.routing.AodvEngine aodvEngine;
+    @Autowired
+    private com.nethub.engine.transport.SocketApiEngine socketApiEngine;
+    @Autowired
+    private com.nethub.engine.protocols.ApplicationProtocolEngine applicationProtocolEngine;
+    @Autowired
+    private com.nethub.engine.security.NatEngine natEngine;
+    @Autowired
+    private com.nethub.engine.security.AclEngine aclEngine;
+    @Autowired
+    private com.nethub.engine.security.FirewallEngine firewallEngine;
+    @Autowired
+    private com.nethub.engine.osi.OsiLayerVisualizer osiLayerVisualizer;
+    @Autowired
+    private com.nethub.service.DeviceTerminalService terminalService;
 
     private NetworkSimulationService simulationService;
 
@@ -500,6 +539,267 @@ public class RealisticNetworkSimulationTest {
         assertNotNull(inspection.getStpInfo());
         assertEquals("IEEE 802.1D Spanning Tree", inspection.getStpInfo().get("protocol"));
         assertTrue((Boolean) inspection.getStpInfo().get("enabled"));
+    }
+
+    // Scenario 21: Hub broadcast to all ports
+    @Test
+    public void testHubBroadcastToAllPorts() {
+        List<String> ports = List.of("port1", "port2", "port3", "port4");
+        List<String> egress = hubEngine.processSignal(1L, "port1", ports);
+        assertNotNull(egress);
+        assertEquals(3, egress.size());
+        assertFalse(egress.contains("port1")); // Does not echo back to ingress
+        assertTrue(egress.contains("port2"));
+        assertTrue(egress.contains("port3"));
+        assertTrue(egress.contains("port4"));
+    }
+
+    // Scenario 22: Repeater signal collision & regeneration
+    @Test
+    public void testRepeaterSignalRegeneration() {
+        boolean collision = hubEngine.detectCollision(1L, 2);
+        assertTrue(collision);
+        assertEquals(1, hubEngine.getCollisionCount(1L));
+    }
+
+    // Scenario 23: Bridge filtering on same segment
+    @Test
+    public void testBridgeFilteringSameSegment() {
+        EthernetFrame frame = EthernetFrame.builder()
+                .sourceMac("00:AA:01:01:01:01")
+                .destinationMac("00:AA:01:01:01:02")
+                .build();
+        bridgeEngine.getBridgeTable(1L).learn("00:AA:01:01:01:02", "port1");
+        List<String> egress = bridgeEngine.processFrame(1L, frame, "port1", List.of("port1", "port2"));
+        assertTrue(egress.isEmpty()); // Filtered on same port/segment
+    }
+
+    // Scenario 24: Bridge forwarding across segments
+    @Test
+    public void testBridgeForwardingAcrossSegments() {
+        EthernetFrame frame = EthernetFrame.builder()
+                .sourceMac("00:AA:01:01:01:01")
+                .destinationMac("00:AA:01:01:01:03")
+                .build();
+        bridgeEngine.getBridgeTable(1L).learn("00:AA:01:01:01:03", "port2");
+        List<String> egress = bridgeEngine.processFrame(1L, frame, "port1", List.of("port1", "port2"));
+        assertEquals(1, egress.size());
+        assertEquals("port2", egress.get(0));
+    }
+
+    // Scenario 25: Wireless AP client association
+    @Test
+    public void testWirelessApClientAssociation() {
+        wirelessEngine.associateClient(1L, "02:AA:BB:CC:DD:01", "192.168.1.55", "Laptop1");
+        var clients = wirelessEngine.getAssociatedClients(1L);
+        assertEquals(1, clients.size());
+        assertEquals("192.168.1.55", clients.get(0).getClientIp());
+        assertNotNull(wirelessEngine.getSupportedStandards());
+    }
+
+    // Scenario 26: CSMA/CD backoff after collision
+    @Test
+    public void testCsmaCdCollisionBackoff() {
+        var csmaCd = macControlEngine.simulateCsmaCd(true, 3);
+        assertTrue(csmaCd.isCollisionDetected());
+        assertNotNull(csmaCd.getJamSignal());
+        assertTrue(csmaCd.getBackoffSlots() >= 0);
+    }
+
+    // Scenario 27: CSMA/CA RTS/CTS exchange
+    @Test
+    public void testCsmaCaRtsCtsExchange() {
+        var csmaCa = macControlEngine.simulateCsmaCa(false, true);
+        assertTrue(csmaCa.isRtsCtsUsed());
+        assertTrue(csmaCa.isAckReceived());
+        assertEquals("TRANSMITTED", csmaCa.getStatus());
+    }
+
+    // Scenario 28: Bandwidth delay calculation
+    @Test
+    public void testBandwidthDelayCalculation() {
+        double serDelay = macControlEngine.calculateTransmissionDelayMs(1500, "100Mbps");
+        assertEquals(0.12, serDelay, 0.01);
+    }
+
+    // Scenario 29: Pathping multi-hop latency and loss
+    @Test
+    public void testPathpingMultiHop() {
+        Project p = projectRepository.save(new Project(null, null, "Pathping Proj", "Desc", null, null));
+        Device pc1 = deviceRepository.save(new Device(null, p.getId(), "PC1", DeviceType.PC, DeviceStatus.ONLINE, 0.0, 0.0, null, null));
+        Device r1  = deviceRepository.save(new Device(null, p.getId(), "Router1", DeviceType.ROUTER, DeviceStatus.ONLINE, 100.0, 0.0, null, null));
+        Device pc2 = deviceRepository.save(new Device(null, p.getId(), "PC2", DeviceType.PC, DeviceStatus.ONLINE, 200.0, 0.0, null, null));
+
+        NetworkInterface pcIntf = interfaceRepository.save(new NetworkInterface(null, pc1.getId(), "eth0", "00:AA:29:01:01:01", "192.168.1.10", "255.255.255.0", "192.168.1.1", null, InterfaceStatus.UP));
+        NetworkInterface rEth0 = interfaceRepository.save(new NetworkInterface(null, r1.getId(), "eth0", "00:AA:29:01:01:02", "192.168.1.1", "255.255.255.0", null, null, InterfaceStatus.UP));
+        NetworkInterface rEth1 = interfaceRepository.save(new NetworkInterface(null, r1.getId(), "eth1", "00:AA:29:01:01:03", "192.168.2.1", "255.255.255.0", null, null, InterfaceStatus.UP));
+        NetworkInterface pc2Intf = interfaceRepository.save(new NetworkInterface(null, pc2.getId(), "eth0", "00:AA:29:01:01:04", "192.168.2.20", "255.255.255.0", "192.168.2.1", null, InterfaceStatus.UP));
+
+        connectionRepository.save(new Connection(null, p.getId(), pcIntf.getId(), rEth0.getId(), ConnectionStatus.ACTIVE, null));
+        connectionRepository.save(new Connection(null, p.getId(), rEth1.getId(), pc2Intf.getId(), ConnectionStatus.ACTIVE, null));
+
+        var cmdRes = terminalService.executeCommand(pc1.getId(), "pathping 192.168.2.20");
+        assertNotNull(cmdRes.getOutput());
+        assertTrue(cmdRes.getOutput().contains("Tracing route to 192.168.2.20"));
+        assertTrue(cmdRes.getOutput().contains("Computing statistics"));
+    }
+
+    // Scenario 30: Switching technique comparison (Circuit vs Packet vs Message)
+    @Test
+    public void testSwitchingTechniquesComparison() {
+        var comp = switchingTechniquesEngine.compareTechniques(1000000, 4, 100_000_000L);
+        assertNotNull(comp);
+        assertNotNull(comp.getCircuitSwitching());
+        assertNotNull(comp.getMessageSwitching());
+        assertNotNull(comp.getPacketSwitching());
+        assertTrue(comp.getPacketSwitching().getTotalLatencyMs() < comp.getMessageSwitching().getTotalLatencyMs());
+    }
+
+    // Scenario 31: Dijkstra shortest path computation
+    @Test
+    public void testDijkstraShortestPath() {
+        List<GraphEdge> edges = List.of(
+                GraphEdge.builder().sourceRouter("R1").targetRouter("R2").cost(1).build(),
+                GraphEdge.builder().sourceRouter("R2").targetRouter("R3").cost(2).build(),
+                GraphEdge.builder().sourceRouter("R1").targetRouter("R3").cost(5).build()
+        );
+        var result = dijkstraEngine.computeShortestPath("R1", edges);
+        assertNotNull(result);
+        assertEquals(0, result.getShortestDistances().get("R1"));
+        assertEquals(1, result.getShortestDistances().get("R2"));
+        assertEquals(3, result.getShortestDistances().get("R3")); // Via R2 (1 + 2 = 3 < 5)
+    }
+
+    // Scenario 32: OSPF link-state database sync & SPF
+    @Test
+    public void testOspfLsdbAndSpf() {
+        Device r1 = deviceRepository.save(new Device(null, 1L, "R1", DeviceType.ROUTER, DeviceStatus.ONLINE, 0.0, 0.0, null, null));
+        NetworkInterface intf = interfaceRepository.save(new NetworkInterface(null, r1.getId(), "eth0", "00:AA:32:01:01:01", "10.0.0.1", "255.255.255.0", null, null, InterfaceStatus.UP));
+
+        var state = ospfEngine.computeOspf(r1.getId(), r1, List.of(intf), Collections.emptyList());
+        assertNotNull(state);
+        assertEquals("10.0.0.1", state.getOspfRouterId());
+        assertFalse(state.getLsdb().isEmpty());
+    }
+
+    // Scenario 33: RIP count-to-infinity prevention (Split Horizon & Poison Reverse)
+    @Test
+    public void testRipCountToInfinityPrevention() {
+        var state = ripEngine.initializeRip(1L, "Router1", List.of(
+                RipEngine.RipRouteEntry.builder().destinationNetwork("192.168.1.0/24").subnetMask("255.255.255.0").nextHop("0.0.0.0").outgoingInterface("eth0").hopCount(1).timerSeconds(30).build()
+        ));
+        assertEquals(1, state.getRoutes().size());
+
+        // Adverting route with 15 hops -> becomes 16 (Infinity)
+        ripEngine.processRipUpdate(1L, "eth0", List.of(
+                RipEngine.RipRouteEntry.builder().destinationNetwork("10.0.0.0/8").subnetMask("255.0.0.0").nextHop("192.168.1.2").outgoingInterface("eth0").hopCount(15).timerSeconds(30).build()
+        ));
+        var updated = ripEngine.getRipState(1L);
+        var infRoute = updated.getRoutes().stream().filter(r -> "10.0.0.0/8".equals(r.getDestinationNetwork())).findFirst();
+        assertTrue(infRoute.isPresent());
+        assertEquals(16, infRoute.get().getHopCount()); // Capped at RIP_INFINITY
+    }
+
+    // Scenario 34: BGP AS-path routing
+    @Test
+    public void testBgpAsPathRouting() {
+        var state = bgpEngine.configureBgp(1L, "BorderRouter1", 65001, "10.0.0.1");
+        bgpEngine.addNeighbor(1L, "192.0.2.1", 65002);
+        bgpEngine.advertisePrefix(1L, "203.0.113.0/24", "0.0.0.0", List.of(65001));
+
+        var current = bgpEngine.getBgpState(1L);
+        assertEquals(65001, current.getLocalAs());
+        assertEquals(1, current.getNeighbors().size());
+        assertEquals(1, current.getRoutingTable().size());
+        assertEquals(List.of(65001), current.getRoutingTable().get(0).getAsPath());
+    }
+
+    // Scenario 35: AODV on-demand route discovery
+    @Test
+    public void testAodvRouteDiscovery() {
+        var rreq = aodvEngine.createRreq("192.168.1.10", "192.168.2.20", 1, 0);
+        assertNotNull(rreq);
+        assertEquals("192.168.1.10", rreq.getOriginatorIp());
+        assertEquals("192.168.2.20", rreq.getDestinationIp());
+
+        var rrep = aodvEngine.createRrep(rreq, "192.168.2.20", 5);
+        assertNotNull(rrep);
+        assertEquals(0, rrep.getHopCount());
+
+        aodvEngine.updateRoute("192.168.1.10", "192.168.2.20", "192.168.1.1", 2, 5);
+        var opt = aodvEngine.lookupRoute("192.168.1.10", "192.168.2.20");
+        assertTrue(opt.isPresent());
+        assertEquals("192.168.1.1", opt.get().getNextHop());
+        assertEquals(2, opt.get().getHopCount());
+    }
+
+    // Scenario 36: Transport & Application protocols
+    @Test
+    public void testTransportAndApplicationProtocols() {
+        // DNS
+        var dnsRes = applicationProtocolEngine.resolveDns("web.nethub.local");
+        assertEquals("192.168.2.80", dnsRes.getResolvedIp());
+
+        // TLS 1.3
+        var tlsRes = applicationProtocolEngine.simulateTlsHandshake("Client", "Server");
+        assertTrue(tlsRes.isHandshakeSuccessful());
+        assertEquals("TLS 1.3", tlsRes.getTlsVersion());
+
+        // FTP
+        var ftpRes = applicationProtocolEngine.simulateFtp("192.168.2.10", "anonymous", "RETR", "test.bin");
+        assertTrue(ftpRes.isSuccess());
+        assertEquals(21, ftpRes.getControlPort());
+
+        // TFTP
+        var tftpRes = applicationProtocolEngine.simulateTftp("192.168.2.10", "RRQ", "firmware.bin", 1536);
+        assertTrue(tftpRes.getTotalBlocks() > 0);
+        assertEquals(3, tftpRes.getTotalBlocks());
+
+        // Email
+        var mailRes = applicationProtocolEngine.simulateEmail("mail.nethub.local", "sender@nethub.local", "rcpt@nethub.local", "Subject", "Body");
+        assertFalse(mailRes.getSmtpTranscript().isEmpty());
+        assertFalse(mailRes.getPop3Transcript().isEmpty());
+
+        // Berkeley Sockets
+        var calcRes = socketApiEngine.runUdpCalculator("192.168.1.10", "192.168.2.10", "ADD", 30.0, 12.0);
+        assertNotNull(calcRes.getMetrics());
+
+        var echoRes = socketApiEngine.runTcpMultiClientEcho("192.168.2.10", List.of("192.168.1.11", "192.168.1.12"));
+        assertNotNull(echoRes.getExecutionLog());
+    }
+
+    // Scenario 37: Advanced security & translation (NAT/PAT, ACL, Stateful Firewall)
+    @Test
+    public void testSecurityAndTranslation() {
+        // NAT/PAT
+        var session = natEngine.translateOutbound(1L, "203.0.113.1", "192.168.1.10", 49152, "93.184.216.34", 80, "TCP");
+        assertNotNull(session);
+        assertEquals("203.0.113.1", session.getInsideGlobalIp());
+        assertTrue(session.getInsideGlobalPort() >= 10000);
+
+        // Standard ACL
+        aclEngine.addRule(1L, AclEngine.AclRule.builder().sequence(10).action("PERMIT").sourceNetwork("192.168.1.0").sourceMask("255.255.255.0").protocol("ANY").build());
+        var aclRes = aclEngine.evaluatePacket(1L, "192.168.1.15", "192.168.2.10", "TCP", 80);
+        assertTrue(aclRes.isPermitted());
+
+        // Stateful Firewall
+        firewallEngine.registerOutboundConnection(1L, "TCP", "192.168.1.10", 54321, "1.1.1.1", 443);
+        boolean allowed = firewallEngine.inspectInboundPacket(1L, "TCP", "1.1.1.1", 443, "192.168.1.10", 54321);
+        assertTrue(allowed);
+
+        // Unsolicited inbound SYN from external to internal
+        boolean blocked = firewallEngine.inspectInboundPacket(1L, "TCP", "203.0.113.99", 60000, "192.168.1.10", 80);
+        assertFalse(blocked);
+    }
+
+    // OSI & TCP/IP Layer Visualizer test
+    @Test
+    public void testOsiLayerVisualizer() {
+        var trace = osiLayerVisualizer.buildEncapsulationProcess(
+                "PC1", "WebServer", "00:AA:01:01:01:01", "00:AA:02:02:02:02",
+                "192.168.1.10", "192.168.2.80", 50000, 80, "HTTP", "GET / HTTP/1.1");
+        assertNotNull(trace);
+        assertEquals(7, trace.getLayers().size());
     }
 }
 

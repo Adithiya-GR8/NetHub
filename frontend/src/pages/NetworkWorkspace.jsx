@@ -9,12 +9,15 @@ import ReactFlow, {
   addEdge,
   ReactFlowProvider
 } from 'reactflow';
-import { Save, CheckCircle, AlertTriangle, Activity } from 'lucide-react';
+import { Save, CheckCircle, AlertTriangle, Activity, Layers, Terminal as TerminalIcon, Eye } from 'lucide-react';
 import api from '../services/api';
 import DevicePalette from '../components/topology/DevicePalette';
 import DeviceNode from '../components/topology/DeviceNode';
 import ConfigurationPanel from '../components/devices/ConfigurationPanel';
 import NetworkSimulationPanel from '../components/simulation/NetworkSimulationPanel';
+import SwitchingComparisonModal from '../components/simulation/SwitchingComparisonModal';
+import OsiVisualizerModal from '../components/simulation/OsiVisualizerModal';
+import DeviceTerminalModal from '../components/terminal/DeviceTerminalModal';
 
 const nodeTypes = {
   customDevice: DeviceNode,
@@ -35,6 +38,22 @@ function NetworkWorkspaceInternal() {
   const [validationResult, setValidationResult] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showSimulation, setShowSimulation] = useState(false);
+  const [showSwitchingComparison, setShowSwitchingComparison] = useState(false);
+  const [showOsiVisualizer, setShowOsiVisualizer] = useState(false);
+  const [terminalDevice, setTerminalDevice] = useState(null);
+
+  const handleOpenTerminal = () => {
+    if (selectedDeviceId) {
+      const dev = rawDevices.find(d => d.id === selectedDeviceId);
+      if (dev) {
+        setTerminalDevice(dev);
+        return;
+      }
+    }
+    if (rawDevices.length > 0) {
+      setTerminalDevice(rawDevices[0]);
+    }
+  };
 
   useEffect(() => {
     fetchTopology();
@@ -275,7 +294,29 @@ function NetworkWorkspaceInternal() {
       <div className="canvas-area d-flex flex-column">
         <div className="bg-white border-bottom p-2 d-flex justify-content-between align-items-center shadow-sm">
           <div className="fw-bold px-2">{project.name} Workspace</div>
-          <div className="d-flex gap-2">
+          <div className="d-flex gap-2 align-items-center">
+            <button 
+              className="btn btn-sm btn-outline-dark d-flex align-items-center gap-1"
+              onClick={handleOpenTerminal}
+              title="Open Device CLI Terminal"
+              disabled={rawDevices.length === 0}
+            >
+              <TerminalIcon size={16} /> Terminal
+            </button>
+            <button 
+              className="btn btn-sm btn-outline-info d-flex align-items-center gap-1"
+              onClick={() => setShowOsiVisualizer(true)}
+              title="7-Layer OSI & 4-Layer TCP/IP Encapsulation Visualizer"
+            >
+              <Eye size={16} /> OSI / TCP-IP
+            </button>
+            <button 
+              className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+              onClick={() => setShowSwitchingComparison(true)}
+              title="Circuit vs Message vs Packet Switching Comparison"
+            >
+              <Layers size={16} /> Switching Tech
+            </button>
             <button 
               className={`btn btn-sm ${showSimulation ? 'btn-primary' : 'btn-outline-primary'} d-flex align-items-center gap-1`}
               onClick={() => setShowSimulation(!showSimulation)}
@@ -350,7 +391,23 @@ function NetworkWorkspaceInternal() {
         deviceId={selectedDeviceId} 
         onClose={() => setSelectedDeviceId(null)} 
         onDeviceUpdated={onDeviceUpdated}
+        onOpenTerminal={(dev) => setTerminalDevice(dev)}
       />
+
+      {/* Switching Comparison Modal */}
+      {showSwitchingComparison && (
+        <SwitchingComparisonModal onClose={() => setShowSwitchingComparison(false)} />
+      )}
+
+      {/* 7-Layer OSI / 4-Layer TCP-IP Visualizer */}
+      {showOsiVisualizer && (
+        <OsiVisualizerModal onClose={() => setShowOsiVisualizer(false)} />
+      )}
+
+      {/* Interactive Device CLI Terminal */}
+      {terminalDevice && (
+        <DeviceTerminalModal device={terminalDevice} onClose={() => setTerminalDevice(null)} />
+      )}
     </div>
   );
 }

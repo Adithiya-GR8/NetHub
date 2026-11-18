@@ -54,6 +54,27 @@ public class Device {
 
     @Column(name = "secondary_dns")
     private String secondaryDns;
+
+    @Column(name = "ssid")
+    private String ssid;
+
+    @Column(name = "wireless_channel")
+    @Builder.Default
+    private Integer wirelessChannel = 6;
+
+    @Column(name = "wireless_security")
+    @Builder.Default
+    private String wirelessSecurity = "WPA2_PSK";
+
+    @Column(name = "wireless_key")
+    private String wirelessKey;
+
+    @Column(name = "routing_protocol")
+    @Builder.Default
+    private String routingProtocol = "STATIC";
+
+    @Column(name = "as_number")
+    private Integer asNumber;
     
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

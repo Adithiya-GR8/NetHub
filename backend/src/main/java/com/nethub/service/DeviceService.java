@@ -53,6 +53,24 @@ public class DeviceService {
         if (updatedDevice.getSecondaryDns() != null) {
             existing.setSecondaryDns(updatedDevice.getSecondaryDns());
         }
+        if (updatedDevice.getSsid() != null) {
+            existing.setSsid(updatedDevice.getSsid());
+        }
+        if (updatedDevice.getWirelessChannel() != null) {
+            existing.setWirelessChannel(updatedDevice.getWirelessChannel());
+        }
+        if (updatedDevice.getWirelessSecurity() != null) {
+            existing.setWirelessSecurity(updatedDevice.getWirelessSecurity());
+        }
+        if (updatedDevice.getWirelessKey() != null) {
+            existing.setWirelessKey(updatedDevice.getWirelessKey());
+        }
+        if (updatedDevice.getRoutingProtocol() != null) {
+            existing.setRoutingProtocol(updatedDevice.getRoutingProtocol());
+        }
+        if (updatedDevice.getAsNumber() != null) {
+            existing.setAsNumber(updatedDevice.getAsNumber());
+        }
         return deviceRepository.save(existing);
     }
 

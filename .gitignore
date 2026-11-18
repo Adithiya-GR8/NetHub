@@ -1,5 +1,8 @@
 # Ignore all markdown files (Per user requirement: do not push any md file to github)
 *.md
+**/*.md
+*.MD
+**/*.MD
 
 # Maven & Java
 backend/target/

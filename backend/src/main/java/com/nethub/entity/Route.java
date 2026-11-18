@@ -42,5 +42,6 @@ public class Route {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "route_type", nullable = false)
+    @Builder.Default
     private RouteType routeType = RouteType.STATIC;
 }
