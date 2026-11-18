@@ -19,11 +19,16 @@ public class SwitchingEngine {
     }
 
     public List<String> processFrame(Long switchDeviceId, EthernetFrame frame, String incomingPort, List<String> availablePorts) {
-        MacAddressTable macTable = getMacTable(switchDeviceId);
+        return processFrame(switchDeviceId, frame, incomingPort, availablePorts, 1);
+    }
 
-        // Step 1: MAC Learning
+    public List<String> processFrame(Long switchDeviceId, EthernetFrame frame, String incomingPort, List<String> availablePorts, Integer vlanId) {
+        MacAddressTable macTable = getMacTable(switchDeviceId);
+        int vlan = (vlanId != null && vlanId > 0) ? vlanId : 1;
+
+        // Step 1: MAC Learning on ingress port and VLAN
         if (frame.getSourceMac() != null && incomingPort != null) {
-            macTable.learn(frame.getSourceMac(), incomingPort);
+            macTable.learn(frame.getSourceMac(), incomingPort, vlan);
         }
 
         List<String> targetPorts = new ArrayList<>();
@@ -39,8 +44,8 @@ public class SwitchingEngine {
             return targetPorts;
         }
 
-        // Step 2: Unicast MAC Lookup
-        Optional<MacTableEntry> entryOpt = macTable.lookup(destMac);
+        // Step 2: Unicast MAC Lookup within VLAN
+        Optional<MacTableEntry> entryOpt = macTable.lookup(destMac, vlan);
 
         // Step 3: Forward or Flood
         if (entryOpt.isPresent()) {

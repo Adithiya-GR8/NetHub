@@ -44,8 +44,12 @@ public class ArpEngine {
     }
 
     public void updateArpCache(Long deviceId, String ipAddress, String macAddress) {
+        updateArpCache(deviceId, ipAddress, macAddress, ArpEntry.STATE_REACHABLE, "eth0");
+    }
+
+    public void updateArpCache(Long deviceId, String ipAddress, String macAddress, String state, String interfaceName) {
         ArpTable table = getArpTable(deviceId);
-        table.put(ipAddress, macAddress);
+        table.put(ipAddress, macAddress, state, interfaceName);
     }
 
     public void clearArpCache(Long deviceId) {

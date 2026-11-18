@@ -38,9 +38,21 @@ public class DeviceService {
     public Device updateDevice(Long id, Device updatedDevice) {
         Device existing = getDevice(id);
         existing.setName(updatedDevice.getName());
+        if (updatedDevice.getHostname() != null && !updatedDevice.getHostname().isEmpty()) {
+            existing.setHostname(updatedDevice.getHostname());
+        }
         existing.setStatus(updatedDevice.getStatus());
         existing.setPositionX(updatedDevice.getPositionX());
         existing.setPositionY(updatedDevice.getPositionY());
+        if (updatedDevice.getDefaultGateway() != null) {
+            existing.setDefaultGateway(updatedDevice.getDefaultGateway());
+        }
+        if (updatedDevice.getPrimaryDns() != null) {
+            existing.setPrimaryDns(updatedDevice.getPrimaryDns());
+        }
+        if (updatedDevice.getSecondaryDns() != null) {
+            existing.setSecondaryDns(updatedDevice.getSecondaryDns());
+        }
         return deviceRepository.save(existing);
     }
 

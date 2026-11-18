@@ -12,10 +12,21 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SimulationEvent {
-    private String type;        // e.g. VALIDATION, ARP_REQUEST, ARP_REPLY, FRAME_FORWARD, ROUTE_LOOKUP, FRAME_REENCAPSULATION, DELIVERED, ERROR
+    @Builder.Default
+    private int stepIndex = 0;
+
+    private String type;        // e.g. FRAME_CREATED, ARP_REQUEST, ARP_REPLY, SWITCH_FORWARD, SWITCH_FLOOD, ROUTE_LOOKUP, FRAME_REENCAPSULATION, DELIVERED, ERROR, PACKET_DROP
+    private Long deviceId;
     private String device;      // Device name
-    private String description; // Human-readable description
-    private Map<String, Object> details; // Key-value details (e.g. mac, ip, port, interface)
+    private String interfaceName;
+    private String action;      // GENERATE, RECEIVE, FORWARD, FLOOD, REENCAPSULATE, DELIVER, DROP
+    private String description; // Short description
+    private String explanation; // In-depth educational explanation of why the device acted this way
+    private String dropReason;  // TTL_EXPIRED, NO_ROUTE, INTERFACE_DOWN, etc.
+    
+    private EthernetFrame frameSnapshot; // Snapshot of the packet/frame at this exact step
+
+    private Map<String, Object> details; // Key-value details (mac, ip, port, vlan, etc.)
     
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();

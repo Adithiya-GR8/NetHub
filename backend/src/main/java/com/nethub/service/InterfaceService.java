@@ -63,6 +63,27 @@ public class InterfaceService {
         existing.setGateway(updatedInterface.getGateway());
         existing.setDnsServer(updatedInterface.getDnsServer());
         existing.setStatus(updatedInterface.getStatus());
+        if (updatedInterface.getAdminStatus() != null) {
+            existing.setAdminStatus(updatedInterface.getAdminStatus());
+        }
+        if (updatedInterface.getMtu() != null) {
+            existing.setMtu(updatedInterface.getMtu());
+        }
+        if (updatedInterface.getSpeed() != null) {
+            existing.setSpeed(updatedInterface.getSpeed());
+        }
+        if (updatedInterface.getDuplex() != null) {
+            existing.setDuplex(updatedInterface.getDuplex());
+        }
+        if (updatedInterface.getVlanId() != null) {
+            existing.setVlanId(updatedInterface.getVlanId());
+        }
+        if (updatedInterface.getPortMode() != null) {
+            existing.setPortMode(updatedInterface.getPortMode());
+        }
+        if (updatedInterface.getAllowedVlans() != null) {
+            existing.setAllowedVlans(updatedInterface.getAllowedVlans());
+        }
         
         return interfaceRepository.save(existing);
     }

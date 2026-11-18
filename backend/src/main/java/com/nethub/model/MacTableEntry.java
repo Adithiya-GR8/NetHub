@@ -13,8 +13,20 @@ import java.time.LocalDateTime;
 public class MacTableEntry {
     private String macAddress;
     private String port; // interface name or ID
-    private String status; // LEARNED or STATIC
+    
+    @Builder.Default
+    private Integer vlanId = 1;
+
+    @Builder.Default
+    private String status = "LEARNED"; // LEARNED, DYNAMIC, or STATIC
     
     @Builder.Default
     private LocalDateTime lastSeen = LocalDateTime.now();
+
+    public boolean isExpired(long maxAgeSeconds) {
+        if ("STATIC".equalsIgnoreCase(status)) {
+            return false;
+        }
+        return lastSeen.plusSeconds(maxAgeSeconds).isBefore(LocalDateTime.now());
+    }
 }
