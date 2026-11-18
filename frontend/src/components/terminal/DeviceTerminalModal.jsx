@@ -174,3 +174,4 @@ export default function DeviceTerminalModal({ device, onClose }) {
     </div>
   );
 }
+

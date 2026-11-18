@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -196,13 +197,31 @@ public class AdvancedNetworkingController {
 
         var devices = deviceRepository.findByProjectId(projectId);
         var connections = connectionRepository.findByProjectId(projectId);
+        Map<Long, Device> deviceMap = devices.stream().collect(Collectors.toMap(Device::getId, d -> d));
 
         List<DijkstraEngine.GraphEdge> edges = new ArrayList<>();
         for (var c : connections) {
-            String d1 = c.getInterface1().getDevice().getName();
-            String d2 = c.getInterface2().getDevice().getName();
-            int cost = c.getInterface1().getSpeed() != null && c.getInterface1().getSpeed().contains("100M") ? 10 : 1;
-            edges.add(new DijkstraEngine.GraphEdge(d1, d2, cost));
+            var intf1 = interfaceRepository.findById(c.getSourceInterfaceId()).orElse(null);
+            var intf2 = interfaceRepository.findById(c.getDestinationInterfaceId()).orElse(null);
+            if (intf1 != null && intf2 != null) {
+                var d1 = deviceMap.get(intf1.getDeviceId());
+                var d2 = deviceMap.get(intf2.getDeviceId());
+                if (d1 != null && d2 != null) {
+                    int cost = intf1.getSpeed() != null && intf1.getSpeed().contains("100M") ? 10 : 1;
+                    edges.add(DijkstraEngine.GraphEdge.builder()
+                            .sourceRouter(d1.getName())
+                            .targetRouter(d2.getName())
+                            .outgoingInterface(intf1.getName())
+                            .cost(cost)
+                            .build());
+                    edges.add(DijkstraEngine.GraphEdge.builder()
+                            .sourceRouter(d2.getName())
+                            .targetRouter(d1.getName())
+                            .outgoingInterface(intf2.getName())
+                            .cost(cost)
+                            .build());
+                }
+            }
         }
 
         String srcName = devices.isEmpty() ? "R1" : devices.get(0).getName();

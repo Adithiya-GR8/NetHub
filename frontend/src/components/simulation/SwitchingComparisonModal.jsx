@@ -247,3 +247,4 @@ export default function SwitchingComparisonModal({ onClose }) {
     </div>
   );
 }
+

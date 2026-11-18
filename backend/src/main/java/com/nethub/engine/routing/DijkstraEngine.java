@@ -22,6 +22,12 @@ public class DijkstraEngine {
         private int cost;
         private String targetNetwork;
         private String subnetMask;
+
+        public GraphEdge(String sourceRouter, String targetRouter, int cost) {
+            this.sourceRouter = sourceRouter;
+            this.targetRouter = targetRouter;
+            this.cost = cost;
+        }
     }
 
     @Data
@@ -130,3 +136,4 @@ public class DijkstraEngine {
                 .build();
     }
 }
+
