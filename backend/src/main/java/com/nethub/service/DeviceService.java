@@ -32,6 +32,37 @@ public class DeviceService {
             throw new ResourceNotFoundException("Project not found with id: " + projectId);
         }
         device.setProjectId(projectId);
+        
+        // Sensible non-IP defaults
+        if (device.getHostname() == null || device.getHostname().trim().isEmpty()) {
+            device.setHostname((device.getName() != null ? device.getName() : "device").toLowerCase() + ".local");
+        }
+        if (device.getStatus() == null) {
+            device.setStatus(com.nethub.entity.enums.DeviceStatus.ONLINE);
+        }
+        if (device.getRoutingProtocol() == null || device.getRoutingProtocol().trim().isEmpty()) {
+            device.setRoutingProtocol("STATIC");
+        }
+        if (device.getType() == com.nethub.entity.enums.DeviceType.ACCESS_POINT) {
+            if (device.getSsid() == null || device.getSsid().trim().isEmpty()) {
+                device.setSsid("NetHub-WiFi");
+            }
+            if (device.getWirelessChannel() == null) {
+                device.setWirelessChannel(6);
+            }
+            if (device.getWirelessSecurity() == null || device.getWirelessSecurity().trim().isEmpty()) {
+                device.setWirelessSecurity("WPA2-PSK (AES)");
+            }
+            if (device.getWirelessKey() == null || device.getWirelessKey().trim().isEmpty()) {
+                device.setWirelessKey("nethub123");
+            }
+        }
+        if (device.getType() == com.nethub.entity.enums.DeviceType.ROUTER || device.getType() == com.nethub.entity.enums.DeviceType.GATEWAY) {
+            if (device.getAsNumber() == null) {
+                device.setAsNumber(65001);
+            }
+        }
+
         return deviceRepository.save(device);
     }
 

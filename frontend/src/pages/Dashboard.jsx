@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Folder, AlertCircle } from 'lucide-react';
+import { Plus, Folder, AlertCircle, BookOpen } from 'lucide-react';
 import api from '../services/api';
+import DemonstrationScenariosModal from '../components/simulation/DemonstrationScenariosModal';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showScenarioModal, setShowScenarioModal] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -66,10 +68,21 @@ export default function Dashboard() {
   return (
     <div className="container mt-5">
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Projects</h2>
-        <button className="btn btn-primary d-flex align-items-center gap-2" onClick={handleOpenModal}>
-          <Plus size={20} /> Create Project
-        </button>
+        <div>
+          <h2 className="mb-0">Projects</h2>
+          <small className="text-muted">Design, configure and simulate realistic network topologies</small>
+        </div>
+        <div className="d-flex gap-2">
+          <button 
+            className="btn btn-outline-primary d-flex align-items-center gap-2"
+            onClick={() => setShowScenarioModal(true)}
+          >
+            <BookOpen size={18} /> Demo Scenarios
+          </button>
+          <button className="btn btn-primary d-flex align-items-center gap-2" onClick={handleOpenModal}>
+            <Plus size={20} /> Create Project
+          </button>
+        </div>
       </div>
 
       <div className="row g-4">
@@ -146,6 +159,20 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {showScenarioModal && (
+        <DemonstrationScenariosModal
+          onClose={() => setShowScenarioModal(false)}
+          onScenarioLoaded={(project) => {
+            setShowScenarioModal(false);
+            if (project && project.id) {
+              navigate(`/project/${project.id}`);
+            } else {
+              fetchProjects();
+            }
+          }}
+        />
       )}
     </div>
   );

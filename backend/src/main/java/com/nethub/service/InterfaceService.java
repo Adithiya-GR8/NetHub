@@ -1,6 +1,7 @@
 package com.nethub.service;
 
 import com.nethub.entity.NetworkInterface;
+import com.nethub.entity.enums.InterfaceStatus;
 import com.nethub.repository.NetworkInterfaceRepository;
 import com.nethub.repository.DeviceRepository;
 import com.nethub.exception.ResourceNotFoundException;
@@ -45,6 +46,37 @@ public class InterfaceService {
                 mac = MACAddressGenerator.generateMAC();
             }
             networkInterface.setMacAddress(mac);
+        }
+
+        if (networkInterface.getName() == null || networkInterface.getName().trim().isEmpty()) {
+            networkInterface.setName("eth0");
+        }
+        if (networkInterface.getSubnetMask() == null || networkInterface.getSubnetMask().trim().isEmpty()) {
+            networkInterface.setSubnetMask("255.255.255.0");
+        }
+        if (networkInterface.getMtu() == null) {
+            networkInterface.setMtu(1500);
+        }
+        if (networkInterface.getSpeed() == null || networkInterface.getSpeed().trim().isEmpty()) {
+            networkInterface.setSpeed("1Gbps");
+        }
+        if (networkInterface.getDuplex() == null || networkInterface.getDuplex().trim().isEmpty()) {
+            networkInterface.setDuplex("FULL");
+        }
+        if (networkInterface.getStatus() == null) {
+            networkInterface.setStatus(InterfaceStatus.UP);
+        }
+        if (networkInterface.getAdminStatus() == null) {
+            networkInterface.setAdminStatus(InterfaceStatus.UP);
+        }
+        if (networkInterface.getPortMode() == null || networkInterface.getPortMode().trim().isEmpty()) {
+            networkInterface.setPortMode("ACCESS");
+        }
+        if (networkInterface.getVlanId() == null) {
+            networkInterface.setVlanId(1);
+        }
+        if (networkInterface.getDnsServer() == null || networkInterface.getDnsServer().trim().isEmpty()) {
+            networkInterface.setDnsServer("8.8.8.8");
         }
         
         validateIp(networkInterface.getIpAddress());

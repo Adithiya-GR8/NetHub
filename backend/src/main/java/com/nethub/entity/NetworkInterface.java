@@ -24,7 +24,7 @@ public class NetworkInterface {
     @Column(nullable = false)
     private String name; // e.g. eth0, port1
     
-    @Column(name = "mac_address", nullable = false, unique = true)
+    @Column(name = "mac_address", nullable = false)
     private String macAddress;
     
     @Column(name = "ip_address")

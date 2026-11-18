@@ -9,7 +9,7 @@ import ReactFlow, {
   addEdge,
   ReactFlowProvider
 } from 'reactflow';
-import { Save, CheckCircle, AlertTriangle, Activity, Layers, Terminal as TerminalIcon, Eye } from 'lucide-react';
+import { Save, CheckCircle, AlertTriangle, Activity, Layers, Terminal as TerminalIcon, Eye, BookOpen } from 'lucide-react';
 import api from '../services/api';
 import DevicePalette from '../components/topology/DevicePalette';
 import DeviceNode from '../components/topology/DeviceNode';
@@ -18,6 +18,7 @@ import NetworkSimulationPanel from '../components/simulation/NetworkSimulationPa
 import SwitchingComparisonModal from '../components/simulation/SwitchingComparisonModal';
 import OsiVisualizerModal from '../components/simulation/OsiVisualizerModal';
 import DeviceTerminalModal from '../components/terminal/DeviceTerminalModal';
+import DemonstrationScenariosModal from '../components/simulation/DemonstrationScenariosModal';
 
 const nodeTypes = {
   customDevice: DeviceNode,
@@ -41,6 +42,21 @@ function NetworkWorkspaceInternal() {
   const [showSwitchingComparison, setShowSwitchingComparison] = useState(false);
   const [showOsiVisualizer, setShowOsiVisualizer] = useState(false);
   const [terminalDevice, setTerminalDevice] = useState(null);
+  const [showScenariosModal, setShowScenariosModal] = useState(false);
+
+  const handleScenarioLoaded = async (loadedProject, scenario) => {
+    await fetchTopology();
+    if (scenario && scenario.category === 'INVALID') {
+      try {
+        const valRes = await api.get(`/projects/${id}/validate`);
+        setValidationResult(valRes.data.data);
+      } catch (err) {
+        console.error("Validation error after scenario load", err);
+      }
+    } else {
+      setValidationResult(null);
+    }
+  };
 
   const handleOpenTerminal = () => {
     if (selectedDeviceId) {
@@ -156,16 +172,61 @@ function NetworkWorkspaceInternal() {
           const deviceCount = nodes.filter(n => n.data.type === type).length + 1;
           const newDevice = {
               name: `${type}${deviceCount}`,
+              hostname: `${type.toLowerCase()}${deviceCount}.local`,
               type: type,
               status: 'ONLINE',
               positionX: position.x,
               positionY: position.y
           };
           
+          if (type === 'ACCESS_POINT') {
+              newDevice.ssid = 'NetHub-WiFi';
+              newDevice.wirelessChannel = 6;
+              newDevice.wirelessSecurity = 'WPA2-PSK (AES)';
+              newDevice.wirelessKey = 'nethub123';
+          } else if (type === 'ROUTER' || type === 'GATEWAY') {
+              newDevice.routingProtocol = 'OSPF';
+              newDevice.asNumber = 65001;
+          }
+
           const res = await api.post(`/projects/${id}/devices`, newDevice);
           const createdDevice = res.data.data;
           
-          await api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'eth0', status: 'UP' });
+          // Context-aware interface creation with default non-IP properties (IP left blank)
+          if (type === 'SWITCH' || type === 'HUB') {
+              await Promise.all([
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'port1', speed: '1Gbps', duplex: 'FULL', mtu: 1500, vlanId: 1, portMode: 'ACCESS', status: 'UP' }),
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'port2', speed: '1Gbps', duplex: 'FULL', mtu: 1500, vlanId: 1, portMode: 'ACCESS', status: 'UP' }),
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'port3', speed: '1Gbps', duplex: 'FULL', mtu: 1500, vlanId: 1, portMode: 'ACCESS', status: 'UP' }),
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'port4', speed: '1Gbps', duplex: 'FULL', mtu: 1500, vlanId: 1, portMode: 'ACCESS', status: 'UP' })
+              ]);
+          } else if (type === 'ROUTER') {
+              await Promise.all([
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'eth0', speed: '1Gbps', duplex: 'FULL', mtu: 1500, subnetMask: '255.255.255.0', status: 'UP' }),
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'eth1', speed: '1Gbps', duplex: 'FULL', mtu: 1500, subnetMask: '255.255.255.0', status: 'UP' })
+              ]);
+          } else if (type === 'ACCESS_POINT') {
+              await Promise.all([
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'wlan0', speed: '300Mbps', duplex: 'HALF', mtu: 1500, status: 'UP' }),
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'eth0', speed: '1Gbps', duplex: 'FULL', mtu: 1500, status: 'UP' })
+              ]);
+          } else if (type === 'BRIDGE' || type === 'REPEATER') {
+              await Promise.all([
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'port1', speed: '100Mbps', duplex: 'FULL', mtu: 1500, status: 'UP' }),
+                  api.post(`/devices/${createdDevice.id}/interfaces`, { name: 'port2', speed: '100Mbps', duplex: 'FULL', mtu: 1500, status: 'UP' })
+              ]);
+          } else {
+              // PC, SERVER, MODEM, GATEWAY
+              await api.post(`/devices/${createdDevice.id}/interfaces`, { 
+                  name: 'eth0', 
+                  speed: type === 'SERVER' ? '10Gbps' : '1Gbps',
+                  duplex: 'FULL',
+                  mtu: 1500,
+                  subnetMask: '255.255.255.0',
+                  dnsServer: '8.8.8.8',
+                  status: 'UP' 
+              });
+          }
           
           const newNode = {
             id: createdDevice.id.toString(),
@@ -296,6 +357,13 @@ function NetworkWorkspaceInternal() {
           <div className="fw-bold px-2">{project.name} Workspace</div>
           <div className="d-flex gap-2 align-items-center">
             <button 
+              className="btn btn-sm btn-warning d-flex align-items-center gap-1 fw-bold text-dark shadow-sm"
+              onClick={() => setShowScenariosModal(true)}
+              title="Browse and load preconfigured demonstration topologies"
+            >
+              <BookOpen size={16} /> Demo Scenarios
+            </button>
+            <button 
               className="btn btn-sm btn-outline-dark d-flex align-items-center gap-1"
               onClick={handleOpenTerminal}
               title="Open Device CLI Terminal"
@@ -407,6 +475,15 @@ function NetworkWorkspaceInternal() {
       {/* Interactive Device CLI Terminal */}
       {terminalDevice && (
         <DeviceTerminalModal device={terminalDevice} onClose={() => setTerminalDevice(null)} />
+      )}
+
+      {/* Preloaded Demonstration Scenarios Modal */}
+      {showScenariosModal && (
+        <DemonstrationScenariosModal 
+          currentProjectId={id} 
+          onScenarioLoaded={handleScenarioLoaded} 
+          onClose={() => setShowScenariosModal(false)} 
+        />
       )}
     </div>
   );
