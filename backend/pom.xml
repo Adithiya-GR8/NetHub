@@ -16,6 +16,7 @@
     <description>NetHub Backend</description>
     <properties>
         <java.version>17</java.version>
+        <start-class>com.nethub.NetHubApplication</start-class>
     </properties>
     <dependencies>
         <dependency>
@@ -65,6 +66,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <mainClass>com.nethub.NetHubApplication</mainClass>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
